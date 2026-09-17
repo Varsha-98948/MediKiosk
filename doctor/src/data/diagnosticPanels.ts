@@ -1,0 +1,106 @@
+import { LabOrder, DirectiveItem } from '@/types/emr';
+
+export const availableLabTests: LabOrder[] = [
+  {
+    id: 'lab-1',
+    testName: 'Glycated Hemoglobin (HbA1c)',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'Glycemic control monitoring',
+  },
+  {
+    id: 'lab-2',
+    testName: 'Fasting Blood Sugar (FBS) & PPBS',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: true,
+    clinicalIndication: 'Basal and postprandial glucose evaluation',
+  },
+  {
+    id: 'lab-3',
+    testName: 'Fasting Lipid Profile (Chol, Trig, HDL, LDL)',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: true,
+    clinicalIndication: 'Cardiovascular risk stratification',
+  },
+  {
+    id: 'lab-4',
+    testName: 'Renal Function Test (Urea, Creatinine, eGFR)',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'Diabetic kidney disease screening',
+  },
+  {
+    id: 'lab-5',
+    testName: 'Urine Albumin-to-Creatinine Ratio (uACR)',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'Microalbuminuria assessment',
+  },
+  {
+    id: 'lab-6',
+    testName: 'Complete Blood Count (CBC) with ESR',
+    category: 'Hematology',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'General health & infection marker',
+  },
+  {
+    id: 'lab-7',
+    testName: '12-Lead Resting Electrocardiogram (ECG)',
+    category: 'Cardiology',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'Ischemic heart disease screening',
+  },
+  {
+    id: 'lab-8',
+    testName: 'Liver Function Test (SGOT, SGPT, Bilirubin)',
+    category: 'Biochemistry',
+    priority: 'Routine',
+    fastingRequired: false,
+    clinicalIndication: 'Statin safety & hepatic profile',
+  },
+];
+
+export const defaultDirectives: DirectiveItem[] = [
+  {
+    id: 'dir-1',
+    category: 'Diet',
+    title: 'Strict Diabetic Medical Nutrition Therapy (1500 kcal)',
+    description: 'Avoid refined sugars, sweets, jaggery, bakery foods, and fruit juices. Incorporate high-fiber green leafy vegetables, millets, and whole pulses.',
+    selected: true,
+  },
+  {
+    id: 'dir-2',
+    category: 'Diet',
+    title: 'Low Sodium Intake (< 2g Sodium / Day)',
+    description: 'Restrict table salt to under 1 flat teaspoon daily. Avoid processed pickles, papads, canned food, and salty commercial snacks.',
+    selected: true,
+  },
+  {
+    id: 'dir-3',
+    category: 'Exercise',
+    title: 'Aerobic Exercise (30 Minutes Brisk Walk 5 Days/Week)',
+    description: 'Maintain regular moderate-intensity walking after meals. Avoid strenuous unaccustomed weight lifting until BP is < 130/80.',
+    selected: true,
+  },
+  {
+    id: 'dir-4',
+    category: 'Precautions',
+    title: 'Diabetic Foot Care & Self-Inspection Protocol',
+    description: 'Wash feet daily in lukewarm water, dry carefully between toes, apply moisturizer (avoid between toes), and never walk barefoot.',
+    selected: true,
+  },
+  {
+    id: 'dir-5',
+    category: 'Emergency',
+    title: 'Hypoglycemia Red-Flag Instructions',
+    description: 'If trembling, cold sweating, or palpitations occur, immediately consume 3 teaspoons of sugar or 15g glucose water and report.',
+    selected: true,
+  },
+];
