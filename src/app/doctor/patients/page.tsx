@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useClinicalEncounter } from '@/context/ClinicalEncounterContext';
+import { apiGet } from '@/lib/apiClient';
 
 export default function DoctorPatientsPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function DoctorPatientsPage() {
     const timer = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/patients?q=${encodeURIComponent(searchQuery)}`);
+        const res = await apiGet(`/api/patients?q=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
         if (res.ok && data.patients) {
           setPatients(data.patients);

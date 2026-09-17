@@ -156,3 +156,30 @@ def call_patient_token(id: str, payload: dict = {}, db: Session = Depends(get_db
             "status": token.status,
         }
     }
+
+
+# ── SSE queue stream (heartbeat-only; real events sent via /tokens call) ──────
+
+@router.get("/stream")
+def queue_stream():
+    """
+    Server-Sent Events endpoint.  Clients connect once and receive a
+    heartbeat every 20 s so the connection stays alive.  When a token is
+    created or updated, the frontend re-polls /api/queue/active.
+    """
+    import time
+    from fastapi.responses import StreamingResponse
+
+    def event_generator():
+        while True:
+            yield "event: heartbeat\ndata: {}\n\n"
+            time.sleep(20)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

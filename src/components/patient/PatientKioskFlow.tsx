@@ -30,6 +30,7 @@ import { MarmaBodyMap, MarmaPoint, PainType } from '../common/MarmaBodyMap';
 import { AdaptiveAiInterview, AiInterviewAnswer } from './AdaptiveAiInterview';
 import { AccessibilityBiometricsPanel } from './AccessibilityBiometricsPanel';
 import { speakText } from '../../utils/speech';
+import { apiPost } from '@/lib/apiClient';
 
 interface PatientKioskFlowProps {
   language: Language;
@@ -102,17 +103,13 @@ export const PatientKioskFlow: React.FC<PatientKioskFlowProps> = ({
     setIsGeneratingToken(true);
     try {
       // 1. Identify or register patient in database
-      const identifyRes = await fetch('/api/patients/identify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: patientName,
-          age,
-          gender: gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Other',
-          phone,
-          abhaId,
-          chronicConditions: pastHistory,
-        }),
+      const identifyRes = await apiPost('/api/patients/identify', {
+        name: patientName,
+        age,
+        gender: gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Other',
+        phone,
+        abhaId,
+        chronicConditions: pastHistory,
       });
 
       const identifyData = await identifyRes.json();
@@ -123,28 +120,24 @@ export const PatientKioskFlow: React.FC<PatientKioskFlowProps> = ({
       const triage = painScore >= 8 ? 'Urgent' : painScore >= 5 ? 'Priority' : 'Routine';
 
       // 3. Issue atomic token in database
-      const tokenRes = await fetch('/api/queue/tokens', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientId,
-          departmentId,
-          triage,
+      const tokenRes = await apiPost('/api/queue/tokens', {
+        patientId,
+        departmentId,
+        triage,
+        chiefComplaint: primarySymptom,
+        intakeSummary: {
           chiefComplaint: primarySymptom,
-          intakeSummary: {
-            chiefComplaint: primarySymptom,
-            painScore,
-            painType,
-            hasRadiation,
-            selectedMarma: selectedMarma?.name,
-            interviewAnswers,
-            pastHistory,
-          },
-          vitals: {
-            pulse: vitals.rhr,
-            bp: '120/80',
-          },
-        }),
+          painScore,
+          painType,
+          hasRadiation,
+          selectedMarma: selectedMarma?.name,
+          interviewAnswers,
+          pastHistory,
+        },
+        vitals: {
+          pulse: vitals.rhr,
+          bp: '120/80',
+        },
       });
 
       const tokenData = await tokenRes.json();

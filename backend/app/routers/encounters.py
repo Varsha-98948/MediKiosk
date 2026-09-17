@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from ..database import get_db
 from ..models import (
     Encounter,
@@ -14,6 +16,57 @@ from ..models import (
     Prescription,
     PrescriptionItem,
 )
+
+# ── Pydantic schemas for mutation bodies ──────────────────────────────────────
+
+class VitalsUpdate(BaseModel):
+    systolic: Optional[float] = None
+    diastolic: Optional[float] = None
+    pulse: Optional[float] = None
+    spo2: Optional[float] = None
+    temp: Optional[float] = None
+    respiratoryRate: Optional[float] = None
+    bloodSugarFasting: Optional[float] = None
+    bloodSugarPostprandial: Optional[float] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    bmi: Optional[float] = None
+    bmiCategory: Optional[str] = None
+
+class NotesUpdate(BaseModel):
+    hpi: Optional[str] = None
+    generalExam: Optional[str] = None
+    cvs: Optional[str] = None
+    respiratory: Optional[str] = None
+    abdomen: Optional[str] = None
+    cns: Optional[str] = None
+    doctorImpressions: Optional[str] = None
+
+class DiagnosisItem(BaseModel):
+    code: str
+    description: str
+    type: Optional[str] = "Primary"
+    status: Optional[str] = "Active"
+    onsetDate: Optional[str] = None
+
+class DiagnosesUpdate(BaseModel):
+    diagnoses: List[DiagnosisItem]
+
+class PrescriptionItemInput(BaseModel):
+    id: Optional[str] = None
+    drugName: str
+    genericName: Optional[str] = None
+    form: Optional[str] = None
+    strength: Optional[str] = None
+    dosageSchedule: Optional[str] = None
+    timing: Optional[str] = None
+    frequency: Optional[str] = None
+    duration: Optional[str] = None
+    instructions: Optional[str] = None
+
+class PrescriptionsUpdate(BaseModel):
+    items: List[PrescriptionItemInput]
+    rxLanguage: Optional[str] = "en"
 
 router = APIRouter(prefix="/api/encounters", tags=["encounters"])
 
@@ -168,3 +221,129 @@ def finalize_encounter(id: str, db: Session = Depends(get_db)):
         "status": "completed",
         "completedAt": encounter.completedAt.isoformat()
     }
+
+
+# ── Vitals PATCH ──────────────────────────────────────────────────────────────
+
+@router.patch("/{id}/vitals")
+def upsert_vitals(id: str, payload: VitalsUpdate, db: Session = Depends(get_db)):
+    encounter = db.query(Encounter).filter(Encounter.id == id).first()
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    vitals = encounter.vitals
+    if vitals:
+        # Update existing
+        for field, value in payload.dict(exclude_none=True).items():
+            setattr(vitals, field, value)
+    else:
+        vitals = VitalSigns(encounterId=encounter.id, **payload.dict(exclude_none=True))
+        db.add(vitals)
+
+    db.commit()
+    db.refresh(vitals)
+
+    return {"success": True, "vitals": {
+        "systolic": vitals.systolic, "diastolic": vitals.diastolic,
+        "pulse": vitals.pulse, "spo2": vitals.spo2, "temp": vitals.temp,
+        "respiratoryRate": vitals.respiratoryRate,
+        "bloodSugarFasting": vitals.bloodSugarFasting,
+        "bloodSugarPostprandial": vitals.bloodSugarPostprandial,
+        "height": vitals.height, "weight": vitals.weight,
+        "bmi": vitals.bmi, "bmiCategory": vitals.bmiCategory,
+    }}
+
+
+# ── Clinical Notes PATCH ──────────────────────────────────────────────────────
+
+@router.patch("/{id}/notes")
+def upsert_clinical_notes(id: str, payload: NotesUpdate, db: Session = Depends(get_db)):
+    encounter = db.query(Encounter).filter(Encounter.id == id).first()
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    notes = encounter.clinicalNotes
+    if notes:
+        for field, value in payload.dict(exclude_none=True).items():
+            setattr(notes, field, value)
+    else:
+        notes = ClinicalNote(encounterId=encounter.id, **payload.dict(exclude_none=True))
+        db.add(notes)
+
+    db.commit()
+    db.refresh(notes)
+
+    return {"success": True, "clinicalNotes": {
+        "hpi": notes.hpi, "generalExam": notes.generalExam,
+        "cvs": notes.cvs, "respiratory": notes.respiratory,
+        "abdomen": notes.abdomen, "cns": notes.cns,
+        "doctorImpressions": notes.doctorImpressions,
+    }}
+
+
+# ── Diagnoses POST (full replace) ─────────────────────────────────────────────
+
+@router.post("/{id}/diagnoses")
+def save_diagnoses(id: str, payload: DiagnosesUpdate, db: Session = Depends(get_db)):
+    encounter = db.query(Encounter).filter(Encounter.id == id).first()
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Delete existing diagnoses and reinsert
+    db.query(Diagnosis).filter(Diagnosis.encounterId == encounter.id).delete()
+    db.flush()
+
+    for d in payload.diagnoses:
+        diag = Diagnosis(
+            encounterId=encounter.id,
+            code=d.code,
+            description=d.description,
+            type=d.type,
+            status=d.status,
+            onsetDate=d.onsetDate,
+        )
+        db.add(diag)
+
+    db.commit()
+
+    return {"success": True, "count": len(payload.diagnoses)}
+
+
+# ── Prescriptions POST (full replace) ─────────────────────────────────────────
+
+@router.post("/{id}/prescriptions")
+def save_prescriptions(id: str, payload: PrescriptionsUpdate, db: Session = Depends(get_db)):
+    encounter = db.query(Encounter).filter(Encounter.id == id).first()
+    if not encounter:
+        raise HTTPException(status_code=404, detail="Encounter not found")
+
+    # Upsert a single Prescription record for this encounter
+    rx = db.query(Prescription).filter(Prescription.encounterId == encounter.id).first()
+    if not rx:
+        rx = Prescription(encounterId=encounter.id, generalAdvice="", isFinalized=False)
+        db.add(rx)
+        db.flush()
+
+    # Replace all items
+    db.query(PrescriptionItem).filter(PrescriptionItem.prescriptionId == rx.id).delete()
+    db.flush()
+
+    for item in payload.items:
+        pi = PrescriptionItem(
+            prescriptionId=rx.id,
+            drugName=item.drugName,
+            genericName=item.genericName,
+            form=item.form,
+            strength=item.strength,
+            dosageSchedule=item.dosageSchedule,
+            timing=item.timing,
+            frequency=item.frequency,
+            duration=item.duration,
+            instructions=item.instructions,
+        )
+        db.add(pi)
+
+    db.commit()
+
+    return {"success": True, "prescriptionId": rx.id, "itemCount": len(payload.items)}
+

@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserSession, Role, AuthContextType } from '@/types/auth';
+import { apiGet, apiPost } from '@/lib/apiClient';
+
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -17,7 +19,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Check real backend session from HttpOnly cookie
-    fetch('/api/auth/me')
+    apiGet('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user) {
@@ -51,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await apiPost('/api/auth/logout');
     } catch (e) {
       console.error('Logout error:', e);
     }

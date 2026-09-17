@@ -10,6 +10,7 @@ import {
   getLocalizedDiagnosis,
   directiveTranslations,
 } from '@/data/doctor/translations';
+import { apiGet } from '@/lib/apiClient';
 
 export default function DoctorPrintPage() {
   const params = useParams();
@@ -34,7 +35,7 @@ export default function DoctorPrintPage() {
   useEffect(() => {
     // Fetch encounter to get real doctor info
     if (patientId) {
-      fetch(`/api/encounters/${patientId}`)
+      apiGet(`/api/encounters/${patientId}`)
         .then((r) => r.json())
         .then((data) => {
           if (data.encounter?.doctor) {

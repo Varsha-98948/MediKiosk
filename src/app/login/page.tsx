@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MultiRoleLogin } from '@/components/auth/MultiRoleLogin';
 import { useAuth } from '@/auth/AuthContext';
+import { apiPost } from '@/lib/apiClient';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,14 +26,10 @@ export default function LoginPage() {
     }
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password || 'doctor123',
-          role: data.role,
-        }),
+      const res = await apiPost('/api/auth/login', {
+        email: data.email,
+        password: data.password || 'doctor123',
+        role: data.role,
       });
 
       const result = await res.json();

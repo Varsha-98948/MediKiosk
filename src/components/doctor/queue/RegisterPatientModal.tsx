@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useClinicalEncounter } from '@/context/ClinicalEncounterContext';
 import { QueueItem, TriageCategory } from '@/types/emr';
+import { apiPost } from '@/lib/apiClient';
 
 interface RegisterPatientModalProps {
   isOpen: boolean;
@@ -33,15 +34,11 @@ export function RegisterPatientModal({ isOpen, onClose }: RegisterPatientModalPr
     setIsSubmitting(true);
     try {
       // 1. Identify or register patient
-      const identifyRes = await fetch('/api/patients/identify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          age: parseInt(age) || 40,
-          gender,
-          phone: phone || '+91 98000 00000',
-        }),
+      const identifyRes = await apiPost('/api/patients/identify', {
+        name: name.trim(),
+        age: parseInt(age) || 40,
+        gender,
+        phone: phone || '+91 98000 00000',
       });
 
       const identifyData = await identifyRes.json();
@@ -50,20 +47,16 @@ export function RegisterPatientModal({ isOpen, onClose }: RegisterPatientModalPr
       if (!patientId) throw new Error('Failed to register patient');
 
       // 2. Generate token in DB
-      const tokenRes = await fetch('/api/queue/tokens', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patientId,
-          departmentId: 'gen_med',
-          triage,
-          chiefComplaint: chiefComplaint || 'Routine consultation',
-          vitals: {
-            bp,
-            pulse,
-            bloodSugar,
-          },
-        }),
+      const tokenRes = await apiPost('/api/queue/tokens', {
+        patientId,
+        departmentId: 'gen_med',
+        triage,
+        chiefComplaint: chiefComplaint || 'Routine consultation',
+        vitals: {
+          bp,
+          pulse,
+          bloodSugar,
+        },
       });
 
       const tokenData = await tokenRes.json();

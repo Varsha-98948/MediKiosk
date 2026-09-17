@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { HospitalWaitingRoomDisplay } from '@/components/common/HospitalWaitingRoomDisplay';
 import { Language } from '@/types/patient';
+import { apiGet, apiSseUrl } from '@/lib/apiClient';
 
 export default function WaitingTvPage() {
   const [language, setLanguage] = useState<Language>('en');
@@ -11,7 +12,7 @@ export default function WaitingTvPage() {
 
   const fetchLiveQueue = useCallback(async () => {
     try {
-      const res = await fetch('/api/queue/active');
+      const res = await apiGet('/api/queue/active');
       const data = await res.json();
       if (res.ok && data.queue) {
         const waiting = data.queue
@@ -44,7 +45,7 @@ export default function WaitingTvPage() {
     let fallbackInterval: NodeJS.Timeout | null = null;
 
     try {
-      eventSource = new EventSource('/api/queue/stream');
+      eventSource = new EventSource(apiSseUrl('/api/queue/stream'));
 
       eventSource.addEventListener('queue_update', (event) => {
         try {

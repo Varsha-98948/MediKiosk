@@ -18,6 +18,7 @@ import { initialQueue } from '@/data/doctor/initialQueue';
 import { mockPatients } from '@/data/doctor/mockPatients';
 import { availableLabTests, defaultDirectives } from '@/data/doctor/diagnosticPanels';
 import { SupportedLanguage, defaultPrescriptionDescriptions } from '@/data/doctor/translations';
+import { apiGet, apiPost, apiPatch, apiSseUrl } from '@/lib/apiClient';
 
 export type EncounterStepKey =
   | 'profile'
@@ -224,7 +225,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   // Fetch real OPD queue from API
   const refreshQueue = useCallback(async () => {
     try {
-      const res = await fetch('/api/queue/active');
+      const res = await apiGet('/api/queue/active');
       const data = await res.json();
       if (res.ok && data.queue) {
         setQueue(data.queue);
@@ -247,7 +248,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     let fallbackInterval: NodeJS.Timeout | null = null;
 
     try {
-      eventSource = new EventSource('/api/queue/stream');
+      eventSource = new EventSource(apiSseUrl('/api/queue/stream'));
 
       eventSource.addEventListener('queue_update', (event) => {
         refreshQueue();
@@ -274,10 +275,10 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setError(null);
     try {
       // 1. Call patient on queue
-      fetch(`/api/queue/tokens/${id}/call`, { method: 'POST' }).catch(() => {});
+      apiPost(`/api/queue/tokens/${id}/call`).catch(() => {});
 
       // 2. Fetch full encounter from DB
-      const res = await fetch(`/api/encounters/${id}`);
+      const res = await apiGet(`/api/encounters/${id}`);
       const data = await res.json();
 
       if (res.ok && data.encounter) {
@@ -449,11 +450,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
 
       // Persist to DB if encounter exists
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/vitals`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updated),
-        }).catch((e) => console.error('Error saving vitals:', e));
+        apiPatch(`/api/encounters/${activeEncounterId}/vitals`, updated).catch((e) => console.error('Error saving vitals:', e));
       }
 
       return updated;
@@ -473,11 +470,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setClinicalNotes((prev) => {
       const updated = { ...prev, ...partial };
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/notes`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updated),
-        }).catch((e) => console.error('Error saving notes:', e));
+        apiPatch(`/api/encounters/${activeEncounterId}/notes`, updated).catch((e) => console.error('Error saving notes:', e));
       }
       return updated;
     });
@@ -488,11 +481,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
       if (prev.some((item) => item.code === d.code)) return prev;
       const updated = [...prev, d];
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/diagnoses`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ diagnoses: updated }),
-        }).catch((e) => console.error('Error saving diagnoses:', e));
+        apiPost(`/api/encounters/${activeEncounterId}/diagnoses`, { diagnoses: updated }).catch((e) => console.error('Error saving diagnoses:', e));
       }
       return updated;
     });
@@ -502,11 +491,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setDiagnoses((prev) => {
       const updated = prev.filter((d) => d.code !== code);
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/diagnoses`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ diagnoses: updated }),
-        }).catch((e) => console.error('Error removing diagnosis:', e));
+        apiPost(`/api/encounters/${activeEncounterId}/diagnoses`, { diagnoses: updated }).catch((e) => console.error('Error removing diagnosis:', e));
       }
       return updated;
     });
@@ -517,11 +502,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setPrescriptions((prev) => {
       const updated = [...prev, newItem];
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: updated, rxLanguage }),
-        }).catch((e) => console.error('Error saving prescription:', e));
+        apiPost(`/api/encounters/${activeEncounterId}/prescriptions`, { items: updated, rxLanguage }).catch((e) => console.error('Error saving prescription:', e));
       }
       return updated;
     });
@@ -531,11 +512,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setPrescriptions((prev) => {
       const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: updated, rxLanguage }),
-        }).catch((e) => console.error('Error updating prescription:', e));
+        apiPost(`/api/encounters/${activeEncounterId}/prescriptions`, { items: updated, rxLanguage }).catch((e) => console.error('Error updating prescription:', e));
       }
       return updated;
     });
@@ -545,11 +522,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setPrescriptions((prev) => {
       const updated = prev.filter((p) => p.id !== id);
       if (activeEncounterId) {
-        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: updated, rxLanguage }),
-        }).catch((e) => console.error('Error removing prescription:', e));
+        apiPost(`/api/encounters/${activeEncounterId}/prescriptions`, { items: updated, rxLanguage }).catch((e) => console.error('Error removing prescription:', e));
       }
       return updated;
     });
@@ -581,9 +554,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   const completeConsultation = useCallback(async () => {
     if (activeEncounterId) {
       try {
-        await fetch(`/api/encounters/${activeEncounterId}/finalize`, {
-          method: 'POST',
-        });
+        await apiPost(`/api/encounters/${activeEncounterId}/finalize`);
       } catch (e) {
         console.error('Error finalizing encounter:', e);
       }
