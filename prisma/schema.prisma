@@ -1,0 +1,212 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  role         String      @default("DOCTOR") // "DOCTOR" | "ADMIN" | "STAFF"
+  specialty    String?
+  regNo        String?
+  roomNumber   String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  encounters   Encounter[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([role])
+  @@index([departmentId])
+}
+
+model Department {
+  id          String                    @id
+  name        String
+  code        String                    @unique // e.g. "A", "C", "O", "P", "AY"
+  room        String
+  tokens      QueueToken[]
+  users       User[]
+  sequences   DepartmentDailySequence[]
+}
+
+model DepartmentDailySequence {
+  departmentId    String
+  department      Department @relation(fields: [departmentId], references: [id])
+  date            String     // "YYYY-MM-DD"
+  lastTokenNumber Int        @default(100)
+
+  @@id([departmentId, date])
+}
+
+model Patient {
+  id                String            @id @default(uuid())
+  mrn               String            @unique // UHID (e.g. UHID-90284)
+  abhaId            String?           @unique
+  name              String
+  age               Int
+  gender            String            // "Male" | "Female" | "Other"
+  phone             String
+  bloodGroup        String?
+  allergies         String?           // JSON string array
+  chronicConditions String?           // JSON string array
+  tokens            QueueToken[]
+  encounters        Encounter[]
+  documents         PatientDocument[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([phone])
+  @@index([mrn])
+}
+
+model QueueToken {
+  id              String      @id @default(uuid())
+  tokenNumber     Int         // Sequence number: 101, 102...
+  tokenFormatted  String      // e.g. "A-101"
+  departmentId    String
+  department      Department  @relation(fields: [departmentId], references: [id])
+  patientId       String
+  patient         Patient     @relation(fields: [patientId], references: [id])
+  date            String      // "YYYY-MM-DD"
+  triage          String      @default("Routine") // "Routine" | "Priority" | "Urgent"
+  status          String      @default("waiting") // "waiting" | "in_consultation" | "completed" | "skipped"
+  chiefComplaint  String?
+  encounter       Encounter?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([departmentId, date, tokenNumber])
+  @@index([status, date])
+  @@index([departmentId, date])
+}
+
+model Encounter {
+  id               String            @id @default(uuid())
+  patientId        String
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  doctorId         String?
+  doctor           User?             @relation(fields: [doctorId], references: [id])
+  tokenId          String?           @unique
+  queueToken       QueueToken?       @relation(fields: [tokenId], references: [id])
+  status           String            @default("in_progress") // "in_progress" | "completed" | "cancelled"
+  intakeSummary    String?           // JSON string of intake data from kiosk
+  vitals           VitalSigns?
+  clinicalNotes    ClinicalNote?
+  diagnoses        Diagnosis[]
+  prescriptions    Prescription[]
+  documents        PatientDocument[]
+  startedAt        DateTime          @default(now())
+  completedAt      DateTime?
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([status])
+}
+
+model PatientDocument {
+  id                 String     @id @default(uuid())
+  patientId          String
+  patient            Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId        String?
+  encounter          Encounter? @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  title              String
+  type               String     // "lab_report" | "prescription" | "discharge_summary" | "other"
+  fileUrl            String     // Public / signed URL or storage path
+  storageKey         String     // Supabase / S3 bucket object key
+  storageBucket      String     @default("medical-documents")
+  mimeType           String     @default("image/jpeg")
+  fileSizeBytes      Int?
+  extractedData      String?    // JSON string of OCR extracted findings & medicines
+  clinicalImpression String?
+  confidenceScore    Float?
+  createdAt          DateTime   @default(now())
+
+  @@index([patientId])
+  @@index([encounterId])
+}
+
+model VitalSigns {
+  id                     String    @id @default(uuid())
+  encounterId            String    @unique
+  encounter              Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  systolic               Int?
+  diastolic              Int?
+  pulse                  Int?
+  spo2                   Int?
+  temp                   Float?
+  respiratoryRate        Int?
+  bloodSugarFasting      Int?
+  bloodSugarPostprandial Int?
+  height                 Float?
+  weight                 Float?
+  bmi                    Float?
+  bmiCategory            String?
+  measuredAt             DateTime  @default(now())
+}
+
+model ClinicalNote {
+  id                String    @id @default(uuid())
+  encounterId       String    @unique
+  encounter         Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  hpi               String?
+  generalExam       String?
+  cvs               String?
+  respiratory       String?
+  abdomen           String?
+  cns               String?
+  doctorImpressions String?
+}
+
+model Diagnosis {
+  id          String    @id @default(uuid())
+  encounterId String
+  encounter   Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  code        String    // e.g. "I10", "E11.9", "NAM-AY-0819"
+  description String
+  type        String    @default("Primary") // "Primary" | "Secondary"
+  status      String    @default("Active")  // "Active" | "Chronic" | "Resolved"
+  onsetDate   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([encounterId])
+}
+
+model Prescription {
+  id                        String             @id @default(uuid())
+  encounterId               String
+  encounter                 Encounter          @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  generalAdvice             String?
+  generalAdviceTranslations String?            // JSON string: { en, hi, mr }
+  rxLanguage                String             @default("en")
+  isFinalized               Boolean            @default(false)
+  items                     PrescriptionItem[]
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  @@index([encounterId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  drugName       String
+  genericName    String?
+  form           String       // "Tab" | "Cap" | "Inj" | "Syrup" | "Ointment"
+  strength       String?      // e.g. "500 mg"
+  dosageSchedule String       // e.g. "1-0-1"
+  timing         String       // "After Food" | "Before Food" | "With Food" | "At Bedtime"
+  frequency      String       // "Daily" | "Twice Daily" | "Thrice Daily" | "As Needed"
+  duration       String       // e.g. "30 Days"
+  instructions   String?
+  diffStatus     String       @default("NEW") // "NEW" | "CONTINUED" | "DOSE_CHANGED" | "DISCONTINUED"
+
+  @@index([prescriptionId])
+}

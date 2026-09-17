@@ -26,9 +26,12 @@ export function A4PrescriptionModal() {
     rxLanguage,
     setRxLanguage,
     prescriptionDescriptions,
+    completeConsultation,
+    consultationStatus,
   } = useClinicalEncounter();
 
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
 
   if (!isA4ModalOpen || !activePatient) return null;
 
@@ -121,6 +124,29 @@ export function A4PrescriptionModal() {
               <span className="material-symbols-outlined text-[16px]">add</span>
             </button>
           </div>
+
+          <button
+            type="button"
+            disabled={isFinalizing || consultationStatus === 'completed'}
+            onClick={async () => {
+              setIsFinalizing(true);
+              try {
+                await completeConsultation();
+              } finally {
+                setIsFinalizing(false);
+              }
+            }}
+            className={`h-8 px-3.5 rounded text-white text-[12px] font-semibold flex items-center gap-1.5 transition-colors shadow-sm ${
+              consultationStatus === 'completed'
+                ? 'bg-emerald-700 cursor-default'
+                : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {consultationStatus === 'completed' ? 'check_circle' : 'verified'}
+            </span>
+            <span>{consultationStatus === 'completed' ? 'Consultation Finalized' : isFinalizing ? 'Finalizing...' : 'Complete & Sign Rx'}</span>
+          </button>
 
           <button
             onClick={handlePrint}

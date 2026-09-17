@@ -1,20 +1,34 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useClinicalEncounter } from '@/context/ClinicalEncounterContext';
-import { mockPatients } from '@/data/doctor/mockPatients';
 
 export default function DoctorPatientsPage() {
   const router = useRouter();
   const { selectPatient } = useClinicalEncounter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [patients, setPatients] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredPatients = mockPatients.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.mrn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.phone.includes(searchQuery)
-  );
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/patients?q=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        if (res.ok && data.patients) {
+          setPatients(data.patients);
+        }
+      } catch (err) {
+        console.error('Error searching patients:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleOpenPatient = (id: string) => {
     selectPatient(id);
@@ -58,37 +72,59 @@ export default function DoctorPatientsPage() {
                 <th className="py-2.5 px-3">Blood Group</th>
                 <th className="py-2.5 px-3">Chronic Conditions</th>
                 <th className="py-2.5 px-3">Last Visit</th>
-                <th className="py-2.5 px-3 text-right">Action</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container-high/40">
-              {filteredPatients.map((patient) => (
-                <tr key={patient.id} className="hover:bg-surface-container-low transition-colors">
-                  <td className="py-3 px-3 font-mono font-bold text-primary">{patient.mrn}</td>
-                  <td className="py-3 px-3 font-semibold text-on-surface">{patient.name}</td>
-                  <td className="py-3 px-3 text-on-surface-variant">{patient.age}y • {patient.gender}</td>
-                  <td className="py-3 px-3 font-medium text-on-surface">{patient.bloodGroup}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex flex-wrap gap-1">
-                      {patient.chronicConditions.slice(0, 2).map((c, idx) => (
-                        <span key={idx} className="text-[10px] bg-surface-container px-2 py-0.5 rounded text-on-surface-variant">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3 px-3 text-on-surface-variant text-[12px]">{patient.lastVisit || 'Today'}</td>
-                  <td className="py-3 px-3 text-right">
-                    <button
-                      onClick={() => handleOpenPatient(patient.id)}
-                      className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-[11px] font-bold hover:bg-primary-container transition-colors shadow-xs inline-flex items-center gap-1"
-                    >
-                      <span>Open EMR</span>
-                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-on-surface-variant text-[13px]">
+                    Searching registry records...
                   </td>
                 </tr>
-              ))}
+              ) : patients.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-on-surface-variant text-[13px]">
+                    No matching patient records found.
+                  </td>
+                </tr>
+              ) : (
+                patients.map((p) => (
+                  <tr key={p.id} className="hover:bg-surface-container-low/60 transition-colors">
+                    <td className="py-3 px-3 font-mono text-[12px] font-bold text-primary">
+                      {p.mrn}
+                    </td>
+                    <td className="py-3 px-3 font-bold text-on-surface">
+                      {p.name}
+                    </td>
+                    <td className="py-3 px-3 text-on-surface-variant">
+                      {p.age}y / {p.gender}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-md bg-surface-container text-[11px] font-medium text-on-surface">
+                        {p.bloodGroup || 'O Positive'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-on-surface-variant text-[12px]">
+                      {Array.isArray(p.chronicConditions) && p.chronicConditions.length > 0
+                        ? p.chronicConditions.join(', ')
+                        : 'None documented'}
+                    </td>
+                    <td className="py-3 px-3 text-on-surface-variant text-[12px]">
+                      {p.lastVisit || p.registrationDate || 'Recent'}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => handleOpenPatient(p.id)}
+                        className="h-7 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold transition-colors inline-flex items-center gap-1"
+                      >
+                        <span>Open Chart</span>
+                        <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

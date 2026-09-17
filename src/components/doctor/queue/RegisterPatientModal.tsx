@@ -22,36 +22,60 @@ export function RegisterPatientModal({ isOpen, onClose }: RegisterPatientModalPr
   const [bp, setBp] = useState('120/80 mmHg');
   const [pulse, setPulse] = useState('74');
   const [bloodSugar, setBloodSugar] = useState('130');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const nextToken = Math.max(...queue.map((q) => q.tokenNumber), 100) + 1;
-    const newId = `p-${Date.now().toString().slice(-5)}`;
-    const newQueueItem: QueueItem = {
-      id: newId,
-      tokenNumber: nextToken,
-      mrn: `UHID-${Date.now().toString().slice(-5)}`,
-      patientName: name,
-      age: parseInt(age) || 40,
-      gender,
-      phone: phone || '+91 98000 00000',
-      category,
-      chiefComplaint: chiefComplaint || 'Routine consultation',
-      triage,
-      status: 'waiting',
-      waitTime: '0 mins',
-      bp: bp || '120/80 mmHg',
-      pulse: parseInt(pulse) || 72,
-      bloodSugar: parseInt(bloodSugar) || 120,
-    };
+    setIsSubmitting(true);
+    try {
+      // 1. Identify or register patient
+      const identifyRes = await fetch('/api/patients/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          age: parseInt(age) || 40,
+          gender,
+          phone: phone || '+91 98000 00000',
+        }),
+      });
 
-    queue.unshift(newQueueItem);
-    selectPatient(newId);
-    onClose();
+      const identifyData = await identifyRes.json();
+      const patientId = identifyData.patient?.id;
+
+      if (!patientId) throw new Error('Failed to register patient');
+
+      // 2. Generate token in DB
+      const tokenRes = await fetch('/api/queue/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId,
+          departmentId: 'gen_med',
+          triage,
+          chiefComplaint: chiefComplaint || 'Routine consultation',
+          vitals: {
+            bp,
+            pulse,
+            bloodSugar,
+          },
+        }),
+      });
+
+      const tokenData = await tokenRes.json();
+      if (tokenData.success) {
+        selectPatient(patientId);
+        onClose();
+      }
+    } catch (err) {
+      console.error('Error registering patient from OPD desk:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

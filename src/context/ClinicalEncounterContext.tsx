@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Patient,
   QueueItem,
@@ -34,6 +34,7 @@ export type EncounterStepKey =
 interface ClinicalEncounterContextType {
   queue: QueueItem[];
   activePatient: Patient | null;
+  activeEncounterId: string | null;
   consultationStatus: 'waiting' | 'in_progress' | 'completed';
   currentStep: EncounterStepKey;
   stepIndex: number;
@@ -50,10 +51,13 @@ interface ClinicalEncounterContextType {
   isA4ModalOpen: boolean;
   rxLanguage: SupportedLanguage;
   prescriptionDescriptions: Record<SupportedLanguage, string>;
+  isLoading: boolean;
+  error: string | null;
 
   // Actions
   selectPatient: (id: string) => void;
   callNextPatient: () => void;
+  refreshQueue: () => Promise<void>;
   setCurrentStep: (step: EncounterStepKey) => void;
   goToNextStep: () => void;
   goToPrevStep: () => void;
@@ -75,7 +79,7 @@ interface ClinicalEncounterContextType {
   setRxLanguage: (lang: SupportedLanguage) => void;
   updatePrescriptionDescription: (lang: SupportedLanguage, text: string) => void;
   resetPrescriptionDescription: (lang?: SupportedLanguage) => void;
-  completeConsultation: () => void;
+  completeConsultation: () => Promise<void>;
 }
 
 const stepsList: EncounterStepKey[] = [
@@ -119,33 +123,25 @@ const initialComplaints: ChiefComplaint[] = [
     onset: 'Gradual',
     notes: 'Wakes up 3-4 times at night to urinate. Mild nocturia noted.',
   },
-  {
-    id: 'comp-2',
-    complaint: 'General fatigue & early morning lethargy',
-    duration: '1 Month',
-    severity: 'Moderate',
-    onset: 'Gradual',
-    notes: 'Struggles with afternoon fatigue despite adequate sleep.',
-  },
 ];
 
 const initialClinicalNotes: ClinicalNotes = {
-  hpi: '58-year-old male with long-standing Type 2 DM (12 years) presenting with progressive polyuria and fatigue over the past 3 weeks. Home glucometer readings show elevated fasting sugars averaging 180–195 mg/dL. Denies fever, chest pain, or dysuria. Adherence to diet has lapsed over past month.',
-  generalExam: 'Alert, oriented, moderately built. No pallor, icterus, cyanosis, clubbing, or pedaloedema. Bilateral carotid pulses normal.',
-  cvs: 'S1 S2 heard. No murmurs. Heart rate regular at 78 bpm.',
-  respiratory: 'Bilateral vesicular breath sounds. Chest clear without wheeze or crackles.',
-  abdomen: 'Soft, non-tender, no organomegaly. Normal bowel sounds present.',
-  cns: 'Higher mental functions intact. Decreased vibration perception threshold (18V) in bilateral great toes. Bilateral ankle jerks diminished.',
-  doctorImpressions: 'Uncontrolled Type 2 Diabetes Mellitus with sub-optimal glycemic control and early diabetic sensory neuropathy. Essential Hypertension Stage 1.',
+  hpi: '58-year-old male presenting with progressive polyuria and fatigue over the past 3 weeks. Fasting sugars averaging 180–195 mg/dL.',
+  generalExam: 'Conscious, oriented, no pedal edema, no pallor/icterus.',
+  cvs: 'S1 S2 heard. No murmurs.',
+  respiratory: 'Bilateral vesicular breath sounds.',
+  abdomen: 'Soft, non-tender.',
+  cns: 'Intact, mild loss of vibration sense in bilateral great toes.',
+  doctorImpressions: 'Uncontrolled Type 2 Diabetes Mellitus with sub-optimal glycemic control and Essential Hypertension Stage 1.',
 };
 
 const initialDiagnoses: Diagnosis[] = [
   {
     code: 'E11.9',
-    description: 'Type 2 diabetes mellitus without complications',
+    description: 'Type 2 diabetes mellitus without complications (Uncontrolled glycemic profile)',
     type: 'Primary',
-    status: 'Chronic',
-    onsetDate: 'May 2014',
+    status: 'Active',
+    onsetDate: 'Jan 2021',
   },
   {
     code: 'I10',
@@ -153,55 +149,6 @@ const initialDiagnoses: Diagnosis[] = [
     type: 'Secondary',
     status: 'Chronic',
     onsetDate: 'Aug 2019',
-  },
-  {
-    code: 'E11.40',
-    description: 'Type 2 diabetes mellitus with diabetic neuropathy, unspecified',
-    type: 'Secondary',
-    status: 'Active',
-    onsetDate: 'Sep 2026',
-  },
-];
-
-const initialHomeMeds: PrescriptionItem[] = [
-  {
-    id: 'home-1',
-    drugName: 'Tab. Glycomet SR',
-    genericName: 'Metformin Hydrochloride Prolonged Release',
-    form: 'Tab',
-    strength: '500 mg',
-    dosageSchedule: '1-0-1',
-    timing: 'After Food',
-    frequency: 'Twice Daily',
-    duration: 'Continuous',
-    instructions: 'Take after breakfast and dinner.',
-    diffStatus: 'CONTINUED',
-  },
-  {
-    id: 'home-2',
-    drugName: 'Tab. Amaryl',
-    genericName: 'Glimepiride',
-    form: 'Tab',
-    strength: '1 mg',
-    dosageSchedule: '1-0-0',
-    timing: 'Before Food',
-    frequency: 'Daily',
-    duration: 'Continuous',
-    instructions: 'Take 15 mins before breakfast.',
-    diffStatus: 'DOSE_CHANGED',
-  },
-  {
-    id: 'home-3',
-    drugName: 'Tab. Telma',
-    genericName: 'Telmisartan',
-    form: 'Tab',
-    strength: '40 mg',
-    dosageSchedule: '0-0-1',
-    timing: 'After Food',
-    frequency: 'Daily',
-    duration: 'Continuous',
-    instructions: 'Take at bedtime.',
-    diffStatus: 'CONTINUED',
   },
 ];
 
@@ -233,45 +180,6 @@ const initialPrescriptions: PrescriptionItem[] = [
     diffStatus: 'DOSE_CHANGED',
     originalDose: '1 mg (1-0-0)',
   },
-  {
-    id: 'rx-3',
-    drugName: 'Tab. Jardiance (Empagliflozin)',
-    genericName: 'Empagliflozin',
-    form: 'Tab',
-    strength: '10 mg',
-    dosageSchedule: '1-0-0',
-    timing: 'Before Food',
-    frequency: 'Daily',
-    duration: '30 Days',
-    instructions: 'Drink minimum 2.5L water daily. Excellent cardio-renal protection.',
-    diffStatus: 'NEW',
-  },
-  {
-    id: 'rx-4',
-    drugName: 'Tab. Telma (Telmisartan)',
-    genericName: 'Telmisartan',
-    form: 'Tab',
-    strength: '40 mg',
-    dosageSchedule: '0-0-1',
-    timing: 'After Food',
-    frequency: 'Daily',
-    duration: '30 Days',
-    instructions: 'Continue regular nightly dosing for BP control.',
-    diffStatus: 'CONTINUED',
-  },
-  {
-    id: 'rx-5',
-    drugName: 'Cap. Rejunex CD3',
-    genericName: 'Methylcobalamin + Alpha Lipoic Acid',
-    form: 'Cap',
-    strength: '1500 mcg',
-    dosageSchedule: '0-0-1',
-    timing: 'After Food',
-    frequency: 'Daily',
-    duration: '30 Days',
-    instructions: 'For diabetic peripheral burning sensation and nerve health.',
-    diffStatus: 'NEW',
-  },
 ];
 
 const initialFollowUp: FollowUpData = {
@@ -287,21 +195,22 @@ const ClinicalEncounterContext = createContext<ClinicalEncounterContextType | nu
 
 export function ClinicalEncounterProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
-  const [activePatient, setActivePatient] = useState<Patient | null>(mockPatients[0]); // Ramesh Chandra
+  const [activePatient, setActivePatient] = useState<Patient | null>(null);
+  const [activeEncounterId, setActiveEncounterId] = useState<string | null>(null);
   const [consultationStatus, setConsultationStatus] = useState<'waiting' | 'in_progress' | 'completed'>('in_progress');
   const [currentStep, setCurrentStep] = useState<EncounterStepKey>('profile');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [vitals, setVitals] = useState<VitalSigns>(initialVitals);
   const [complaints, setComplaints] = useState<ChiefComplaint[]>(initialComplaints);
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNotes>(initialClinicalNotes);
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>(initialDiagnoses);
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>(initialPrescriptions);
-  const [homeMeds] = useState<PrescriptionItem[]>(initialHomeMeds);
+  const [homeMeds] = useState<PrescriptionItem[]>([]);
   const [labOrders, setLabOrders] = useState<LabOrder[]>([
     availableLabTests[0], // HbA1c
     availableLabTests[1], // FBS & PPBS
-    availableLabTests[3], // RFT
-    availableLabTests[4], // uACR
   ]);
   const [directives, setDirectives] = useState<DirectiveItem[]>(defaultDirectives);
   const [followUp, setFollowUp] = useState<FollowUpData>(initialFollowUp);
@@ -310,19 +219,167 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   const [rxLanguage, setRxLanguage] = useState<SupportedLanguage>('en');
   const [prescriptionDescriptions, setPrescriptionDescriptions] = useState<Record<SupportedLanguage, string>>(defaultPrescriptionDescriptions);
 
+  const isInitialMount = useRef(true);
+
+  // Fetch real OPD queue from API
+  const refreshQueue = useCallback(async () => {
+    try {
+      const res = await fetch('/api/queue/active');
+      const data = await res.json();
+      if (res.ok && data.queue) {
+        setQueue(data.queue);
+        // If no active patient is selected and there's a serving or waiting patient, auto-select first
+        if (!activePatient && isInitialMount.current && data.queue.length > 0) {
+          isInitialMount.current = false;
+          selectPatient(data.queue[0].id);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching queue:', err);
+    }
+  }, [activePatient]);
+
+  // Initial load + Real-time SSE listener with 5s polling fallback
+  useEffect(() => {
+    refreshQueue();
+
+    let eventSource: EventSource | null = null;
+    let fallbackInterval: NodeJS.Timeout | null = null;
+
+    try {
+      eventSource = new EventSource('/api/queue/stream');
+
+      eventSource.addEventListener('queue_update', (event) => {
+        refreshQueue();
+      });
+
+      eventSource.onerror = () => {
+        // SSE disconnected, fallback to 5s polling
+        if (!fallbackInterval) {
+          fallbackInterval = setInterval(refreshQueue, 5000);
+        }
+      };
+    } catch (e) {
+      fallbackInterval = setInterval(refreshQueue, 5000);
+    }
+
+    return () => {
+      if (eventSource) eventSource.close();
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
+  }, [refreshQueue]);
+
+  const selectPatient = useCallback(async (id: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // 1. Call patient on queue
+      fetch(`/api/queue/tokens/${id}/call`, { method: 'POST' }).catch(() => {});
+
+      // 2. Fetch full encounter from DB
+      const res = await fetch(`/api/encounters/${id}`);
+      const data = await res.json();
+
+      if (res.ok && data.encounter) {
+        const enc = data.encounter;
+        setActiveEncounterId(enc.id);
+        setActivePatient({
+          id: enc.patient.id,
+          mrn: enc.patient.mrn,
+          name: enc.patient.name,
+          age: enc.patient.age,
+          gender: enc.patient.gender,
+          phone: enc.patient.phone,
+          bloodGroup: enc.patient.bloodGroup || 'O Positive',
+          allergies: enc.patient.allergies || [],
+          chronicConditions: enc.patient.chronicConditions || [],
+          registrationDate: enc.patient.registrationDate || new Date().toISOString().split('T')[0],
+        });
+
+        setConsultationStatus(enc.status === 'completed' ? 'completed' : 'in_progress');
+
+        if (enc.vitals) {
+          setVitals({
+            systolic: enc.vitals.systolic || 120,
+            diastolic: enc.vitals.diastolic || 80,
+            pulse: enc.vitals.pulse || 72,
+            spo2: enc.vitals.spo2 || 98,
+            temp: enc.vitals.temp || 98.4,
+            respiratoryRate: enc.vitals.respiratoryRate || 18,
+            bloodSugarFasting: enc.vitals.bloodSugarFasting || 110,
+            bloodSugarPostprandial: enc.vitals.bloodSugarPostprandial || 140,
+            height: enc.vitals.height || 170,
+            weight: enc.vitals.weight || 70,
+            bmi: enc.vitals.bmi || 24.2,
+            bmiCategory: enc.vitals.bmiCategory || 'Normal',
+          });
+        }
+
+        if (enc.clinicalNotes) {
+          setClinicalNotes({
+            hpi: enc.clinicalNotes.hpi || '',
+            generalExam: enc.clinicalNotes.generalExam || '',
+            cvs: enc.clinicalNotes.cvs || '',
+            respiratory: enc.clinicalNotes.respiratory || '',
+            abdomen: enc.clinicalNotes.abdomen || '',
+            cns: enc.clinicalNotes.cns || '',
+            doctorImpressions: enc.clinicalNotes.doctorImpressions || '',
+          });
+        }
+
+        if (enc.diagnoses && enc.diagnoses.length > 0) {
+          setDiagnoses(enc.diagnoses);
+        } else {
+          setDiagnoses([]);
+        }
+
+        if (enc.prescription?.items && enc.prescription.items.length > 0) {
+          setPrescriptions(enc.prescription.items);
+        } else {
+          setPrescriptions([]);
+        }
+
+        if (enc.intakeSummary?.chiefComplaint) {
+          setComplaints([
+            {
+              id: `comp-${Date.now()}`,
+              complaint: enc.intakeSummary.chiefComplaint,
+              duration: enc.intakeSummary.duration || 'Recently noted',
+              severity: (enc.intakeSummary.painScore >= 8 ? 'Severe' : enc.intakeSummary.painScore >= 5 ? 'Moderate' : 'Mild') as any,
+              onset: 'Gradual',
+              notes: enc.intakeSummary.painType ? `Character: ${enc.intakeSummary.painType}` : undefined,
+            },
+          ]);
+        }
+      } else {
+        // Fallback to in-memory mock if API errored
+        const found = mockPatients.find((p) => p.id === id) || mockPatients[0];
+        setActivePatient(found);
+      }
+    } catch (err: any) {
+      console.error('Error selecting patient:', err);
+      const found = mockPatients.find((p) => p.id === id) || mockPatients[0];
+      setActivePatient(found);
+    } finally {
+      setIsLoading(false);
+      setCurrentStep('profile');
+    }
+  }, []);
+
+  const callNextPatient = useCallback(() => {
+    const nextWaiting = queue.find((q) => q.status === 'waiting');
+    if (nextWaiting) {
+      selectPatient(nextWaiting.id);
+    }
+  }, [queue, selectPatient]);
+
   const updatePrescriptionDescription = useCallback((lang: SupportedLanguage, text: string) => {
-    setPrescriptionDescriptions((prev) => ({
-      ...prev,
-      [lang]: text,
-    }));
+    setPrescriptionDescriptions((prev) => ({ ...prev, [lang]: text }));
   }, []);
 
   const resetPrescriptionDescription = useCallback((lang?: SupportedLanguage) => {
     if (lang) {
-      setPrescriptionDescriptions((prev) => ({
-        ...prev,
-        [lang]: defaultPrescriptionDescriptions[lang],
-      }));
+      setPrescriptionDescriptions((prev) => ({ ...prev, [lang]: defaultPrescriptionDescriptions[lang] }));
     } else {
       setPrescriptionDescriptions(defaultPrescriptionDescriptions);
     }
@@ -334,10 +391,10 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   const safetyAlerts = useMemo<SafetyAlert[]>(() => {
     const alerts: SafetyAlert[] = [];
 
-    // 1. Check for Penicillin Allergy
+    // Check Penicillin Allergy
     const hasPenicillinRx = prescriptions.some((p) =>
       p.drugName.toLowerCase().includes('augmentin') ||
-      p.genericName.toLowerCase().includes('amoxicillin') ||
+      p.genericName?.toLowerCase().includes('amoxicillin') ||
       p.drugName.toLowerCase().includes('penicillin')
     );
     const hasPenicillinAllergy = activePatient?.allergies.some((a) =>
@@ -350,71 +407,13 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
         type: 'allergy',
         severity: 'critical',
         title: 'CRITICAL ALLERGY CONTRAINDICATION: Penicillin Class',
-        description: `Patient ${activePatient?.name} has a recorded life-threatening allergy to Penicillin. Augmentin / Amoxicillin should be discontinued immediately.`,
+        description: `Patient ${activePatient?.name} has a recorded allergy to Penicillin.`,
         acknowledged: acknowledgedAlertIds.includes('alert-penicillin'),
       });
     }
 
-    // 2. Check for SGLT2 + Hypoglycemia Risk
-    const hasSGLT2 = prescriptions.some((p) => p.drugName.toLowerCase().includes('jardiance') || p.genericName.toLowerCase().includes('empagliflozin'));
-    const hasSU = prescriptions.some((p) => p.drugName.toLowerCase().includes('amaryl') || p.genericName.toLowerCase().includes('glimepiride'));
-
-    if (hasSGLT2 && hasSU) {
-      alerts.push({
-        id: 'alert-hypo-risk',
-        type: 'interaction',
-        severity: 'moderate',
-        title: 'Increased Hypoglycemia Risk: Glimepiride + Empagliflozin',
-        description: 'Combination of Sulfonylurea with SGLT2 inhibitor increases hypoglycemia frequency. Educate patient on early signs and glucose candy protocol.',
-        acknowledged: acknowledgedAlertIds.includes('alert-hypo-risk'),
-      });
-    }
-
-    // 3. Check for Dual ARB/ACEi or high BP combo
-    const hasARB = prescriptions.some((p) => p.drugName.toLowerCase().includes('telma') || p.genericName.toLowerCase().includes('telmisartan'));
-    if (hasARB && vitals.systolic > 140) {
-      alerts.push({
-        id: 'alert-bp-titrate',
-        type: 'dosage',
-        severity: 'low',
-        title: 'Sub-target Blood Pressure: 142/88 mmHg',
-        description: 'Current BP exceeds standard diabetic target (<130/80 mmHg). Consider titrating Telmisartan to 80mg or adding Amlodipine 5mg on review.',
-        acknowledged: acknowledgedAlertIds.includes('alert-bp-titrate'),
-      });
-    }
-
     return alerts;
-  }, [prescriptions, activePatient, vitals.systolic, acknowledgedAlertIds]);
-
-  const selectPatient = useCallback((id: string) => {
-    const found = mockPatients.find((p) => p.id === id) || {
-      id,
-      mrn: `UHID-${id}`,
-      name: 'Selected Patient',
-      age: 45,
-      gender: 'Male' as const,
-      phone: '+91 98000 00000',
-      bloodGroup: 'O Positive',
-      allergies: [],
-      chronicConditions: [],
-      registrationDate: '2026-01-01',
-    };
-    setActivePatient(found);
-    setConsultationStatus('in_progress');
-    setCurrentStep('profile');
-
-    // Update queue status
-    setQueue((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, status: 'in_progress' } : q))
-    );
-  }, []);
-
-  const callNextPatient = useCallback(() => {
-    const nextWaiting = queue.find((q) => q.status === 'waiting');
-    if (nextWaiting) {
-      selectPatient(nextWaiting.id);
-    }
-  }, [queue, selectPatient]);
+  }, [prescriptions, activePatient, acknowledgedAlertIds]);
 
   const goToNextStep = useCallback(() => {
     const currentIndex = stepsList.indexOf(currentStep);
@@ -432,10 +431,10 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     }
   }, [currentStep]);
 
+  // Database-backed Autosave Mutations
   const updateVitals = useCallback((partial: Partial<VitalSigns>) => {
     setVitals((prev) => {
       const updated = { ...prev, ...partial };
-      // Auto-recalculate BMI if height or weight changed
       if (partial.height !== undefined || partial.weight !== undefined) {
         const hInMeters = updated.height / 100;
         if (hInMeters > 0) {
@@ -447,15 +446,22 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
           else updated.bmiCategory = 'Obese';
         }
       }
+
+      // Persist to DB if encounter exists
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/vitals`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        }).catch((e) => console.error('Error saving vitals:', e));
+      }
+
       return updated;
     });
-  }, []);
+  }, [activeEncounterId]);
 
   const addComplaint = useCallback((c: Omit<ChiefComplaint, 'id'>) => {
-    const newComplaint: ChiefComplaint = {
-      ...c,
-      id: `comp-${Date.now()}`,
-    };
+    const newComplaint: ChiefComplaint = { ...c, id: `comp-${Date.now()}` };
     setComplaints((prev) => [...prev, newComplaint]);
   }, []);
 
@@ -464,37 +470,90 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   }, []);
 
   const updateClinicalNotes = useCallback((partial: Partial<ClinicalNotes>) => {
-    setClinicalNotes((prev) => ({ ...prev, ...partial }));
-  }, []);
+    setClinicalNotes((prev) => {
+      const updated = { ...prev, ...partial };
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/notes`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        }).catch((e) => console.error('Error saving notes:', e));
+      }
+      return updated;
+    });
+  }, [activeEncounterId]);
 
   const addDiagnosis = useCallback((d: Diagnosis) => {
     setDiagnoses((prev) => {
       if (prev.some((item) => item.code === d.code)) return prev;
-      return [...prev, d];
+      const updated = [...prev, d];
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/diagnoses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diagnoses: updated }),
+        }).catch((e) => console.error('Error saving diagnoses:', e));
+      }
+      return updated;
     });
-  }, []);
+  }, [activeEncounterId]);
 
   const removeDiagnosis = useCallback((code: string) => {
-    setDiagnoses((prev) => prev.filter((d) => d.code !== code));
-  }, []);
+    setDiagnoses((prev) => {
+      const updated = prev.filter((d) => d.code !== code);
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/diagnoses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diagnoses: updated }),
+        }).catch((e) => console.error('Error removing diagnosis:', e));
+      }
+      return updated;
+    });
+  }, [activeEncounterId]);
 
   const addPrescription = useCallback((item: Omit<PrescriptionItem, 'id'>) => {
-    const newItem: PrescriptionItem = {
-      ...item,
-      id: `rx-${Date.now()}`,
-    };
-    setPrescriptions((prev) => [...prev, newItem]);
-  }, []);
+    const newItem: PrescriptionItem = { ...item, id: `rx-${Date.now()}` };
+    setPrescriptions((prev) => {
+      const updated = [...prev, newItem];
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: updated, rxLanguage }),
+        }).catch((e) => console.error('Error saving prescription:', e));
+      }
+      return updated;
+    });
+  }, [activeEncounterId, rxLanguage]);
 
   const updatePrescription = useCallback((id: string, updates: Partial<PrescriptionItem>) => {
-    setPrescriptions((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
-    );
-  }, []);
+    setPrescriptions((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: updated, rxLanguage }),
+        }).catch((e) => console.error('Error updating prescription:', e));
+      }
+      return updated;
+    });
+  }, [activeEncounterId, rxLanguage]);
 
   const removePrescription = useCallback((id: string) => {
-    setPrescriptions((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+    setPrescriptions((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      if (activeEncounterId) {
+        fetch(`/api/encounters/${activeEncounterId}/prescriptions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: updated, rxLanguage }),
+        }).catch((e) => console.error('Error removing prescription:', e));
+      }
+      return updated;
+    });
+  }, [activeEncounterId, rxLanguage]);
 
   const addLabOrder = useCallback((order: LabOrder) => {
     setLabOrders((prev) => {
@@ -508,9 +567,7 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
   }, []);
 
   const toggleDirective = useCallback((id: string) => {
-    setDirectives((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, selected: !d.selected } : d))
-    );
+    setDirectives((prev) => prev.map((d) => (d.id === id ? { ...d, selected: !d.selected } : d)));
   }, []);
 
   const updateFollowUp = useCallback((partial: Partial<FollowUpData>) => {
@@ -521,21 +578,28 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
     setAcknowledgedAlertIds((prev) => [...prev, id]);
   }, []);
 
-  const completeConsultation = useCallback(() => {
-    if (activePatient) {
-      setQueue((prev) =>
-        prev.map((q) => (q.id === activePatient.id ? { ...q, status: 'completed' } : q))
-      );
+  const completeConsultation = useCallback(async () => {
+    if (activeEncounterId) {
+      try {
+        await fetch(`/api/encounters/${activeEncounterId}/finalize`, {
+          method: 'POST',
+        });
+      } catch (e) {
+        console.error('Error finalizing encounter:', e);
+      }
     }
+
     setConsultationStatus('completed');
     setIsA4ModalOpen(false);
-  }, [activePatient]);
+    refreshQueue();
+  }, [activeEncounterId, refreshQueue]);
 
   return (
     <ClinicalEncounterContext.Provider
       value={{
         queue,
         activePatient,
+        activeEncounterId,
         consultationStatus,
         currentStep,
         stepIndex,
@@ -552,8 +616,11 @@ export function ClinicalEncounterProvider({ children }: { children: React.ReactN
         isA4ModalOpen,
         rxLanguage,
         prescriptionDescriptions,
+        isLoading,
+        error,
         selectPatient,
         callNextPatient,
+        refreshQueue,
         setCurrentStep,
         goToNextStep,
         goToPrevStep,

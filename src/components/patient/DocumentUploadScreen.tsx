@@ -92,29 +92,31 @@ export const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({
 
     setTimeout(async () => {
       try {
-        // Call backend OCR endpoint
-        const res = await fetch('/api/gemini/document-ocr', {
+        // Upload to storage and process via backend OCR pipeline
+        const res = await fetch('/api/documents/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageBase64: imgUrl,
             documentType: selectedType,
+            title: selectedType === 'prescription' ? 'Previous Prescription' : 'Biochemistry & Lab Report',
           }),
         });
 
         const data = await res.json();
+        const doc = data.document || data;
         
         onDocumentProcessed({
-          id: `doc-${Date.now()}`,
-          title: data.documentType || 'Biochemistry & Hematology Lab Report',
+          id: doc.id || `doc-${Date.now()}`,
+          title: doc.title || (selectedType === 'prescription' ? 'Previous Prescription' : 'Biochemistry Lab Report'),
           type: selectedType as any,
-          date: data.date || '12 Aug 2026',
-          facility: data.facility || 'AIIMS Laboratory Network',
-          originalImageUrl: imgUrl,
-          extractedFields: data.extractedFields || [],
-          medicinesFound: data.medicinesFound || [],
-          clinicalImpression: data.clinicalImpression || 'Extracted lab report parameters',
-          overallConfidence: data.confidenceScore || 97,
+          date: doc.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          facility: doc.facility || 'Uploaded Clinical Document',
+          originalImageUrl: doc.fileUrl || imgUrl,
+          extractedFields: doc.extractedFields || [],
+          medicinesFound: doc.medicinesFound || [],
+          clinicalImpression: doc.clinicalImpression || 'Extracted document parameters',
+          overallConfidence: doc.confidenceScore || doc.overallConfidence || 97,
         });
       } catch (err) {
         // Fallback default

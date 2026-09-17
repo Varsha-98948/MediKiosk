@@ -16,13 +16,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserSession | null>(null);
 
   useEffect(() => {
-    // Restore session from localStorage if available
-    try {
-      const savedUser = localStorage.getItem('medikiosk_user_session');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      } else {
-        // Default guest doctor session for instant OPD usability
+    // Check real backend session from HttpOnly cookie
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          // Default guest doctor session for instant testing if not logged in
+          setUser({
+            id: 'doc-001',
+            name: 'Dr. Dhananjay Chavan',
+            role: 'doctor',
+            department: 'Diabetology & Metabolic Care',
+            roomNumber: 'Room 3',
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Error verifying auth session:', err);
         setUser({
           id: 'doc-001',
           name: 'Dr. Dhananjay Chavan',
@@ -30,38 +42,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           department: 'Diabetology & Metabolic Care',
           roomNumber: 'Room 3',
         });
-      }
-    } catch (e) {
-      console.error('Error loading session:', e);
-    }
+      });
   }, []);
 
   const login = (userData: UserSession) => {
     setUser(userData);
-    try {
-      localStorage.setItem('medikiosk_user_session', JSON.stringify(userData));
-    } catch (e) {
-      console.error('Error saving session:', e);
-    }
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = async () => {
     try {
-      localStorage.removeItem('medikiosk_user_session');
+      await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
-      console.error('Error clearing session:', e);
+      console.error('Logout error:', e);
     }
+    setUser(null);
   };
 
   const setRole = (role: Role) => {
-    setUser((prev) => {
-      const updated = prev ? { ...prev, role } : { id: `user-${Date.now()}`, name: 'Guest User', role };
-      try {
-        localStorage.setItem('medikiosk_user_session', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
+    setUser((prev) => (prev ? { ...prev, role } : { id: `user-${Date.now()}`, name: 'Guest User', role }));
   };
 
   return (

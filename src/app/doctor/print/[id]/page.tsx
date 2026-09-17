@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useClinicalEncounter } from '@/context/ClinicalEncounterContext';
 import {
@@ -23,12 +23,31 @@ export default function DoctorPrintPage() {
     rxLanguage,
     selectPatient,
   } = useClinicalEncounter();
+  const [doctorInfo, setDoctorInfo] = useState<{ name: string; specialty: string; regNo: string } | null>(null);
 
   useEffect(() => {
     if (patientId && (!activePatient || activePatient.id !== patientId)) {
       selectPatient(patientId);
     }
   }, [patientId, activePatient, selectPatient]);
+
+  useEffect(() => {
+    // Fetch encounter to get real doctor info
+    if (patientId) {
+      fetch(`/api/encounters/${patientId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.encounter?.doctor) {
+            setDoctorInfo({
+              name: data.encounter.doctor.name || 'Treating Physician',
+              specialty: data.encounter.doctor.specialty || 'General Medicine',
+              regNo: data.encounter.doctor.regNo || '',
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [patientId]);
 
   if (!activePatient) {
     return <div className="p-8 text-center font-sans">Loading prescription for #{patientId}...</div>;
@@ -58,9 +77,9 @@ export default function DoctorPrintPage() {
           <p className="text-xs text-slate-500">12, Mahatma Gandhi Marg, Civil Lines, Pune - 411001</p>
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold text-slate-900">Dr. Dhananjay Chavan</p>
-          <p className="text-xs text-slate-600">MBBS, MD (Internal Medicine)</p>
-          <p className="text-xs text-slate-500">Reg No: KMC-74920</p>
+          <p className="text-sm font-bold text-slate-900">{doctorInfo?.name || 'Treating Physician'}</p>
+          <p className="text-xs text-slate-600">{doctorInfo?.specialty || 'General Medicine'}</p>
+          {doctorInfo?.regNo && <p className="text-xs text-slate-500">Reg No: {doctorInfo.regNo}</p>}
         </div>
       </div>
 
@@ -142,8 +161,8 @@ export default function DoctorPrintPage() {
       <div className="mt-16 pt-6 border-t border-slate-300 flex justify-between text-xs text-slate-500">
         <p>Generated via MediKiosk Hospital Precision EMR</p>
         <div className="text-right">
-          <p className="font-bold text-slate-900">Dr. Dhananjay Chavan</p>
-          <p>Senior Consultant Physician</p>
+          <p className="font-bold text-slate-900">{doctorInfo?.name || 'Treating Physician'}</p>
+          <p>{doctorInfo?.specialty || 'General Medicine'}</p>
         </div>
       </div>
     </div>

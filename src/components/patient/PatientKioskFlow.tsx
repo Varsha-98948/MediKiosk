@@ -95,33 +95,119 @@ export const PatientKioskFlow: React.FC<PatientKioskFlowProps> = ({
     { code: 'mr', name: 'Marathi', native: 'मराठी' },
   ];
 
-  const handleFinishAndGenerateToken = () => {
-    const newToken: HospitalToken = {
-      tokenNumber: generatedTokenNumber,
-      departmentId: selectedMarma?.region === 'chest' ? 'cardiology' : 'gen_med',
-      departmentName: selectedMarma?.region === 'chest' ? 'Cardiology & Heart Center' : 'General Medicine & Ayush',
-      doctorName: selectedMarma?.region === 'chest' ? 'Dr. Rajeshwar Sen' : 'Dr. Ananya Sharma',
-      roomNumber: selectedMarma?.region === 'chest' ? 'Room 104 (OPD Block A)' : 'Room 101 (OPD Block A)',
-      patientId: `pat-${Date.now().toString().slice(-4)}`,
-      patientName: patientName,
-      phone: phone,
-      abhaId: abhaId,
-      age: age,
-      gender: gender,
-      reasonForVisit: primarySymptom,
-      generatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'waiting',
-      patientsAhead: 3,
-      estimatedWaitMins: 15,
-      intakeCompleted: true,
-      isEmergency: painScore >= 9,
-    };
+  const [isGeneratingToken, setIsGeneratingToken] = useState(false);
+  const [issuedTokenDetails, setIssuedTokenDetails] = useState<HospitalToken | null>(null);
 
-    onTokenGenerated(newToken);
-    setCurrentStep('token_pass');
+  const handleFinishAndGenerateToken = async () => {
+    setIsGeneratingToken(true);
+    try {
+      // 1. Identify or register patient in database
+      const identifyRes = await fetch('/api/patients/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: patientName,
+          age,
+          gender: gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Other',
+          phone,
+          abhaId,
+          chronicConditions: pastHistory,
+        }),
+      });
 
-    const welcomeAnnouncement = `Your consultation token is ${generatedTokenNumber}. Please proceed to ${newToken.roomNumber}.`;
-    speakText(welcomeAnnouncement, language);
+      const identifyData = await identifyRes.json();
+      const patientId = identifyData.patient?.id || `pat-${Date.now()}`;
+
+      // 2. Determine department from symptoms / Marma map
+      const departmentId = selectedMarma?.region === 'chest' ? 'cardiology' : 'gen_med';
+      const triage = painScore >= 8 ? 'Urgent' : painScore >= 5 ? 'Priority' : 'Routine';
+
+      // 3. Issue atomic token in database
+      const tokenRes = await fetch('/api/queue/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId,
+          departmentId,
+          triage,
+          chiefComplaint: primarySymptom,
+          intakeSummary: {
+            chiefComplaint: primarySymptom,
+            painScore,
+            painType,
+            hasRadiation,
+            selectedMarma: selectedMarma?.name,
+            interviewAnswers,
+            pastHistory,
+          },
+          vitals: {
+            pulse: vitals.rhr,
+            bp: '120/80',
+          },
+        }),
+      });
+
+      const tokenData = await tokenRes.json();
+      if (tokenData.success && tokenData.token) {
+        const t = tokenData.token;
+        setGeneratedTokenNumber(t.tokenNumber);
+        const tokenObj: HospitalToken = {
+          tokenNumber: t.tokenNumber,
+          departmentId: t.departmentId,
+          departmentName: t.departmentName,
+          doctorName: t.doctorName || 'Consulting Physician',
+          roomNumber: t.roomNumber,
+          patientId: t.patientId,
+          patientName: t.patientName,
+          phone: t.phone,
+          abhaId: t.abhaId,
+          age: t.age,
+          gender: t.gender,
+          reasonForVisit: t.reasonForVisit,
+          generatedAt: new Date(t.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'waiting',
+          patientsAhead: t.patientsAhead,
+          estimatedWaitMins: t.estimatedWaitMins,
+          intakeCompleted: true,
+          isEmergency: triage === 'Urgent',
+        };
+        setIssuedTokenDetails(tokenObj);
+        onTokenGenerated(tokenObj);
+        setCurrentStep('token_pass');
+
+        const announcement = `Your consultation token is ${t.tokenNumber}. Please proceed to ${t.roomNumber}.`;
+        speakText(announcement, language);
+      } else {
+        throw new Error(tokenData.error || 'Failed to issue token');
+      }
+    } catch (err) {
+      console.error('Error generating token:', err);
+      // Fallback local token
+      const fallbackToken: HospitalToken = {
+        tokenNumber: generatedTokenNumber,
+        departmentId: 'gen_med',
+        departmentName: 'General Medicine & Ayush',
+        doctorName: 'Dr. Dhananjay Chavan',
+        roomNumber: 'Room 3 (OPD Block A)',
+        patientId: `pat-${Date.now().toString().slice(-4)}`,
+        patientName: patientName,
+        phone: phone,
+        abhaId: abhaId,
+        age: age,
+        gender: gender,
+        reasonForVisit: primarySymptom,
+        generatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'waiting',
+        patientsAhead: 2,
+        estimatedWaitMins: 10,
+        intakeCompleted: true,
+      };
+      setIssuedTokenDetails(fallbackToken);
+      onTokenGenerated(fallbackToken);
+      setCurrentStep('token_pass');
+    } finally {
+      setIsGeneratingToken(false);
+    }
   };
 
   return (
@@ -713,10 +799,10 @@ export const PatientKioskFlow: React.FC<PatientKioskFlowProps> = ({
               {generatedTokenNumber}
             </div>
             <div className="text-sm font-bold text-stone-800 mt-1">
-              {patientName} • Assigned to <strong>Dr. Rajeshwar Sen</strong>
+              {patientName} • Assigned to <strong>{issuedTokenDetails?.doctorName || 'Consultant Doctor'}</strong>
             </div>
             <div className="text-xs text-stone-500 font-medium">
-              Room 104 (OPD Block A) • Estimated Wait: 15 mins (3 patients ahead)
+              {issuedTokenDetails?.roomNumber || 'Room 3 (OPD Block A)'} • Estimated Wait: {issuedTokenDetails?.estimatedWaitMins || 10} mins ({issuedTokenDetails?.patientsAhead ?? 2} patients ahead)
             </div>
           </div>
 
