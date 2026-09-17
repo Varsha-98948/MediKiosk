@@ -1,0 +1,141 @@
+export interface DrugCatalogItem {
+  id: string;
+  name: string;
+  genericName: string;
+  form: 'Tab' | 'Cap' | 'Inj' | 'Syrup' | 'Ointment';
+  strength: string;
+  defaultSchedule: string;
+  defaultTiming: 'Before Food' | 'After Food' | 'With Food' | 'At Bedtime';
+  defaultDuration: string;
+  instructions: string;
+  drugClass: string;
+  allergyTags?: string[];
+  contraindications?: string[];
+}
+
+export const drugCatalog: DrugCatalogItem[] = [
+  {
+    id: 'drug-1',
+    name: 'Tab. Glycomet SR (Metformin)',
+    genericName: 'Metformin Hydrochloride Prolonged Release',
+    form: 'Tab',
+    strength: '500 mg',
+    defaultSchedule: '1-0-1',
+    defaultTiming: 'After Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take immediately after principal meals to reduce GI distress.',
+    drugClass: 'Biguanide',
+    contraindications: ['Severe renal impairment (eGFR < 30 mL/min)'],
+  },
+  {
+    id: 'drug-2',
+    name: 'Tab. Glycomet SR 1000',
+    genericName: 'Metformin Hydrochloride Prolonged Release',
+    form: 'Tab',
+    strength: '1000 mg',
+    defaultSchedule: '1-0-1',
+    defaultTiming: 'After Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take with or after dinner.',
+    drugClass: 'Biguanide',
+    contraindications: ['Severe renal impairment'],
+  },
+  {
+    id: 'drug-3',
+    name: 'Tab. Amaryl (Glimepiride)',
+    genericName: 'Glimepiride',
+    form: 'Tab',
+    strength: '2 mg',
+    defaultSchedule: '1-0-0',
+    defaultTiming: 'Before Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take 15 minutes before breakfast. Watch for signs of hypoglycemia.',
+    drugClass: 'Sulfonylurea',
+    allergyTags: ['Sulfa Drugs'],
+  },
+  {
+    id: 'drug-4',
+    name: 'Tab. Januvia (Sitagliptin)',
+    genericName: 'Sitagliptin Phosphate',
+    form: 'Tab',
+    strength: '100 mg',
+    defaultSchedule: '1-0-0',
+    defaultTiming: 'After Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take once daily at breakfast.',
+    drugClass: 'DPP-4 Inhibitor',
+  },
+  {
+    id: 'drug-5',
+    name: 'Tab. Telma (Telmisartan)',
+    genericName: 'Telmisartan',
+    form: 'Tab',
+    strength: '40 mg',
+    defaultSchedule: '0-0-1',
+    defaultTiming: 'After Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take at night for optimal 24-hr BP control.',
+    drugClass: 'Angiotensin Receptor Blocker (ARB)',
+  },
+  {
+    id: 'drug-6',
+    name: 'Tab. Atorva (Atorvastatin)',
+    genericName: 'Atorvastatin Calcium',
+    form: 'Tab',
+    strength: '10 mg',
+    defaultSchedule: '0-0-1',
+    defaultTiming: 'At Bedtime',
+    defaultDuration: '30 Days',
+    instructions: 'Take at night after food.',
+    drugClass: 'HMG-CoA Reductase Inhibitor (Statin)',
+  },
+  {
+    id: 'drug-7',
+    name: 'Tab. Jardiance (Empagliflozin)',
+    genericName: 'Empagliflozin',
+    form: 'Tab',
+    strength: '10 mg',
+    defaultSchedule: '1-0-0',
+    defaultTiming: 'Before Food',
+    defaultDuration: '30 Days',
+    instructions: 'Drink plenty of water throughout the day. Monitor perineal hygiene.',
+    drugClass: 'SGLT-2 Inhibitor',
+  },
+  {
+    id: 'drug-8',
+    name: 'Tab. Augmentin 625 Duo',
+    genericName: 'Amoxicillin + Potassium Clavulanate',
+    form: 'Tab',
+    strength: '625 mg',
+    defaultSchedule: '1-0-1',
+    defaultTiming: 'After Food',
+    defaultDuration: '5 Days',
+    instructions: 'Complete the entire 5-day course.',
+    drugClass: 'Penicillin Antibiotic',
+    allergyTags: ['Penicillin'],
+  },
+  {
+    id: 'drug-9',
+    name: 'Tab. Pan 40 (Pantoprazole)',
+    genericName: 'Pantoprazole Gastro-resistant',
+    form: 'Tab',
+    strength: '40 mg',
+    defaultSchedule: '1-0-0',
+    defaultTiming: 'Before Food',
+    defaultDuration: '14 Days',
+    instructions: 'Take 30 minutes before morning tea/breakfast.',
+    drugClass: 'Proton Pump Inhibitor',
+  },
+  {
+    id: 'drug-10',
+    name: 'Cap. Rejunex CD3',
+    genericName: 'Methylcobalamin + Alpha Lipoic Acid + Benfotiamine',
+    form: 'Cap',
+    strength: '1500 mcg',
+    defaultSchedule: '0-0-1',
+    defaultTiming: 'After Food',
+    defaultDuration: '30 Days',
+    instructions: 'Take at night after dinner for diabetic neuropathy care.',
+    drugClass: 'Neurotropic Vitamin',
+  },
+];
