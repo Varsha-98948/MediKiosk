@@ -1,0 +1,7 @@
+{
+  "name": "MediKiosk — AI Clinical Intake & Electronic Medical Records",
+  "description": "AI-assisted clinical intake kiosk, digital EMR, prescription builder, document OCR intelligence, and patient-doctor workflow for Indian hospitals.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
